@@ -1,0 +1,105 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - ecommerce-network
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ADVERTISED_PORT: 9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "order.created:1:1,user.registered:1:1"
+    networks:
+      - ecommerce-network
+
+  mongodb:
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - ecommerce-network
+
+  user-service:
+    build: ./user-service
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./user-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=3001
+      - MONGO_URI=mongodb://mongodb:27017/user_db
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - mongodb
+      - kafka
+    networks:
+      - ecommerce-network
+
+  product-service:
+    build: ./product-service
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./product-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=3002
+      - MONGO_URI=mongodb://mongodb:27017/product_db
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - mongodb
+      - kafka
+    networks:
+      - ecommerce-network
+
+  order-service:
+    build: ./order-service
+    ports:
+      - "3003:3003"
+    volumes:
+      - ./order-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=3003
+      - MONGO_URI=mongodb://mongodb:27017/order_db
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - mongodb
+      - kafka
+    networks:
+      - ecommerce-network
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+    networks:
+      - ecommerce-network
+
+networks:
+  ecommerce-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
